@@ -42,6 +42,7 @@ async def select(sql, args, size=None):
 # insert,update,delete
 async def execute(sql, args):
     logging.info(sql, args)
+    global __pool
     with (await __pool) as conn:
         try:
             cur = await conn.cursor()
@@ -60,7 +61,7 @@ class Field(object):
     def __init__(self, name, column_type, primary_key, default):
         self.name = name
         self.column_type = column_type
-        self.primary_type = primary_key
+        self.primary_key = primary_key
         self.default = default
 
     def __str__(self):
@@ -98,7 +99,7 @@ class TextField(Field):
 
 
 class ModelMetaclass(type):
-
+    # 创建对象前执行的方法
     def __new__(cls, name, bases, attrs):
         # 排除Model类本身
         if name == "Model":
@@ -120,26 +121,26 @@ class ModelMetaclass(type):
                     primaryKey = k
                 else:
                     fileds.append(k)
-            if not primaryKey:
-                raise RuntimeError('Primary key not found')
-            for k in mappings.keys():
-                attrs.pop(k)
-            escaped_fields = list(map(lambda f: '`%s`' % f, fileds))
-            attrs['__mappings__'] = mappings
-            attrs['__table__'] = tableName
-            attrs['__primary_key__'] = primaryKey
-            attrs['__fields__'] = fileds
-            # 构造默认的select, insert, update, delete 语句
-            attrs['__select__'] = 'select `%s`,`%s` from `%s`' % (primaryKey, ','.join(escaped_fields), tableName)
-            attrs['__insert__'] = 'insert into `%s` (`%s`,`%s`) values (%s)' % (
-                tableName, ','.join(escaped_fields), primaryKey, create_args_string(len(escaped_fields) + 1))
-            attrs['__update__'] = 'update `%s` set %s where `%s` = ?' % (tableName,
-                                                                         ','.join(map(lambda f: '`%s`=?' % (
-                                                                                 mappings.get(f).name or f),
-                                                                                      fileds)),
-                                                                         primaryKey)
-            attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
-            return type.__new__(cls, name, bases, attrs)
+        if not primaryKey:
+            raise RuntimeError('Primary key not found')
+        for k in mappings.keys():
+            attrs.pop(k)
+        escaped_fields = list(map(lambda f: '`%s`' % f, fileds))
+        attrs['__mappings__'] = mappings
+        attrs['__table__'] = tableName
+        attrs['__primary_key__'] = primaryKey
+        attrs['__fields__'] = fileds
+        # 构造默认的select, insert, update, delete 语句
+        attrs['__select__'] = 'select `%s`,`%s` from `%s`' % (primaryKey, ','.join(escaped_fields), tableName)
+        attrs['__insert__'] = 'insert into `%s` (`%s`,`%s`) values (%s)' % (
+            tableName, ','.join(escaped_fields), primaryKey, create_args_string(len(escaped_fields) + 1))
+        attrs['__update__'] = 'update `%s` set %s where `%s` = ?' % (tableName,
+                                                                     ','.join(map(lambda f: '`%s`=?' % (
+                                                                             mappings.get(f).name or f),
+                                                                                  fileds)),
+                                                                     primaryKey)
+        attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
+        return type.__new__(cls, name, bases, attrs)
 
 
 # 定义Model
